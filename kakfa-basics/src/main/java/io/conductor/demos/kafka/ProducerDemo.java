@@ -14,11 +14,11 @@ public class ProducerDemo {
 
     public static void main(String[] args) {
 
-        log.info("Starting kafka producer demo");
+        log.info("Starting kafka producer");
 
         // create Producer Properties
         Properties properties = new Properties();
-        properties.setProperty("bootstrap.servers", "127.0.0.1:9092");
+        properties.setProperty("bootstrap.servers", "localhost:9092");
 
         // set producer properties
         properties.setProperty("key.serializer", StringSerializer.class.getName());
