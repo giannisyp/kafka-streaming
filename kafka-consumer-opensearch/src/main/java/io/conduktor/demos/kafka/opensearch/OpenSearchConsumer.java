@@ -21,6 +21,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.index.IndexRequest;
+import org.opensearch.action.index.IndexResponse;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
@@ -73,13 +74,35 @@ public class OpenSearchConsumer {
 
         return restHighLevelClient;
     }
+
+    private static KafkaConsumer<String, String> createKafkaConsumer(){
+        String groupId = "group1";
+
+        // create Producer Properties
+        Properties properties = new Properties();
+        properties.setProperty("bootstrap.servers", "localhost:9092");
+
+        // create consumer configs
+        properties.setProperty("key.deserializer", StringDeserializer.class.getName());
+        properties.setProperty("value.deserializer", StringDeserializer.class.getName());
+        properties.setProperty("group.id", groupId);
+        properties.setProperty("auto.offset.reset", "latest");
+
+        // create consumer
+        return new KafkaConsumer<>(properties);
+
+    }
+
     public static void main(String[] args) throws IOException {
         Logger log = LoggerFactory.getLogger(OpenSearchConsumer.class.getSimpleName());
 
         // Create the openSearch client
         RestHighLevelClient openSearchClient = createOpenSearchClient();
 
-        try(openSearchClient) {
+        // create the kafka client
+        KafkaConsumer<String, String> consumer = createKafkaConsumer();
+
+        try(openSearchClient; consumer) {
 
             boolean indexExists = openSearchClient.indices().exists(new GetIndexRequest("wikimedia"), RequestOptions.DEFAULT);
             if (!indexExists) {
@@ -90,9 +113,32 @@ public class OpenSearchConsumer {
             }else {
                 log.info("The WikiMedia index already exists");
             }
+            // we subscribe the consumer
 
+            consumer.subscribe(Collections.singletonList("wikimedia.recentchange"));
+
+            while(true){
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(3000));
+
+            int recordCount = records.count();
+            log.info("Received " + recordCount + " record(s)");
+
+
+            for (ConsumerRecord<String, String> record : records) {
+                // send the record into OpenSearch
+                try{
+                    IndexRequest indexRequest = new IndexRequest("wikimedia").source(record.value(), XContentType.JSON);
+
+                    IndexResponse response = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
+
+                    log.info(response.getId());
+                } catch (Exception e) {
+
+                }
+
+            }
+            }
         }
-        // create the kafka client
 
         // main code topic
 
